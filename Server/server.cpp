@@ -94,8 +94,8 @@ int main(void)
 
 	// Create a SOCKET for connecting to server
 	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-	u_long iMode = 1;
-	//ioctlsocket(ListenSocket, FIONBIO, &iMode);
+
+
 	if (ListenSocket == -1) {
 		//printf("socket failed with error: %ld\n", WSAGetLastError());
 		freeaddrinfo(result);
@@ -133,6 +133,19 @@ int main(void)
 	Close(ListenSocket); //ß
 	//closesocket(ListenSocket);
 
+
+	//-------------------------
+	// Set the socket I/O mode: In this case FIONBIO
+	// enables or disables the blocking mode for the 
+	// socket based on the numerical value of iMode.
+	// If iMode = 0, blocking is enabled; 
+	// If iMode != 0, non-blocking mode is enabled.
+	u_long iMode = 1;
+	iResult = ioctlsocket(ClientSocket, FIONBIO, &iMode);
+	if (iResult != NO_ERROR)
+		printf("ioctlsocket failed with error: %ld\n", iResult);
+
+
 	// Receive until the peer shuts down the connection
 	do {
 		char str[BUFSIZ] = { 0 };
@@ -140,44 +153,50 @@ int main(void)
 		iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
 
 		if (iResult > 0) {
-			//printf("Bytes received: %d\n", iResult);
 			std::cout << "[Client]: " << recvbuf << std::endl;
 			// Echo the buffer back to the sender
-			do{
-				std::cout << "[Server]: ";
+			//do{
+			//	std::cout << "[Server]: ";
 
-				std::cin.getline(str, sizeof(str));
-				if (strlen(str) > 0)
-					iSendResult = send(ClientSocket, str, (int)strlen(str), 0);
-			} while (strlen(str) <= 0);
-			if (iSendResult == -1) {
-				//printf("send failed with error: %d\n", WSAGetLastError());
-				Close(ListenSocket);
+			//	std::cin.getline(str, sizeof(str));
+			//	if (strlen(str) > 0)
+			//		iSendResult = send(ClientSocket, str, (int)strlen(str), 0);
+			//} while (strlen(str) <= 0);
+			//if (iSendResult == -1) {
+			//	Close(ListenSocket);
+			//	return 1;
+			//}
+		}
+		//else if (iResult == 0)
+		//	printf("Connection closing...\n");
+		else  {
+
+			int nError = WSAGetLastError();
+			if (nError != WSAEWOULDBLOCK&&nError != 0)
+			{
+				std::cout << "Winsock error code: " << nError << "\r\n";
+				std::cout << "Server disconnected!\r\n";
+				// Shutdown our socket
+				shutdown(ClientSocket, SD_SEND);
+				//printf("recv failed with error: %d\n", WSAGetLastError());
+				Close(ClientSocket);
 				return 1;
 			}
-			//printf("Bytes sent: %d\n", iSendResult);
-		}
-		else if (iResult == 0)
-			printf("Connection closing...\n");
-		else  {
-			//printf("recv failed with error: %d\n", WSAGetLastError());
-			Close(ListenSocket);
-			return 1;
 		}
 
-	} while (iResult > 0);
+	} while (true);
 
 	// shutdown the connection since we're done
 	iResult = shutdown(ClientSocket, 0x01);
 	if (iResult == -1) {
 		//printf("shutdown failed with error: %d\n", WSAGetLastError());
-		Close(ListenSocket);
+		Close(ClientSocket);
 		sockQuit();
 		return 1;
 	}
 
 	// cleanup
-	Close(ListenSocket);
+	Close(ClientSocket);
 	sockQuit();
 	return 0;
 }
